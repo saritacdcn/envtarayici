@@ -2,6 +2,19 @@
   "name": "env-doctor",
   "version": "0.1.0",
   "description": "Static environment variable and contract linter for Node.js and TypeScript projects",
+  "keywords": [
+    "env",
+    "environment",
+    "linter",
+    "doctor",
+    "cli",
+    "security",
+    "dotenv",
+    "static-analysis",
+    "typescript",
+    "nextjs",
+    "vite"
+  ],
   "type": "module",
   "bin": {
     "env-doctor": "./dist/cli.js"
