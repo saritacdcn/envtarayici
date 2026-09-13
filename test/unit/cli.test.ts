@@ -17,7 +17,7 @@ describe('runCli', () => {
   };
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'env-doctor-cli-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'envtarayici-cli-'));
     stdoutLogs = [];
     stderrLogs = [];
   });
@@ -30,7 +30,7 @@ describe('runCli', () => {
     const code = await runCli(['--help'], mockStdout, mockStderr);
 
     expect(code).toBe(0);
-    expect(stdoutLogs.join('')).toContain('ENV DOCTOR');
+    expect(stdoutLogs.join('')).toContain('ENVTARAYICI');
     expect(stdoutLogs.join('')).toContain('USAGE:');
   });
 

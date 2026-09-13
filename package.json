@@ -1,12 +1,12 @@
 {
-  "name": "env-doctor",
+  "name": "envtarayici",
   "version": "0.1.0",
   "description": "Static environment variable and contract linter for Node.js and TypeScript projects",
   "keywords": [
     "env",
     "environment",
     "linter",
-    "doctor",
+    "scanner",
     "cli",
     "security",
     "dotenv",
@@ -17,7 +17,7 @@
   ],
   "type": "module",
   "bin": {
-    "env-doctor": "./dist/cli.js"
+    "envtarayici": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,12 +29,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Saritacdcn/env-doctor.git"
+    "url": "https://github.com/Saritacdcn/envtarayici.git"
   },
   "bugs": {
-    "url": "https://github.com/Saritacdcn/env-doctor/issues"
+    "url": "https://github.com/Saritacdcn/envtarayici/issues"
   },
-  "homepage": "https://github.com/Saritacdcn/env-doctor#readme",
+  "homepage": "https://github.com/Saritacdcn/envtarayici#readme",
   "scripts": {
     "build": "tsup",
     "test": "vitest run",

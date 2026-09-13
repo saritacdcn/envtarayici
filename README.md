@@ -1,43 +1,69 @@
-# ENV Doctor 🩺
+# envtarayici 🔍
 
 > Static environment variable and contract linter for Node.js and TypeScript projects.
 
-**ENV Doctor** audits your environment contracts (`.env.example`), local configuration (`.env`, `.env.local`), and source code in under a second—with zero code changes and zero secret value exposure.
+**envtarayici** audits your environment contracts (`.env.example`), local development files (`.env`, `.env.local`), and source code with zero code changes or external service dependencies.
 
 ---
 
-## Why ENV Doctor?
+## The Contract Concept
 
-- **Prevent Onboarding Friction:** Ensures all required environment variables documented in `.env.example` are present in developers' local setups.
-- **Stop Secret Leaks to Client Bundles:** Detects dangerous patterns where secrets (e.g. `STRIPE_SECRET_KEY`, `DATABASE_URL`) are inadvertently prefixed with client-exposed tags like `NEXT_PUBLIC_` or `VITE_`.
-- **Catch Contract Drift:** Identifies new `process.env` or `import.meta.env` references introduced into source code that were not added to `.env.example`.
-- **Catch Git Tracking Violations:** Flags whether sensitive `.env` files were accidentally committed to the Git index.
+In modern fullstack development, environment configuration operates across three distinct layers:
+
+1. **The Contract (`.env.example`, `.env.sample`, `.env.template`):** The declared baseline defining which variables the application requires to run.
+2. **The Local Environment (`.env`, `.env.local`):** The developer's local environment files containing local configuration values.
+3. **The Source Code (`src/**/*.{ts,js,tsx,jsx}`):** Where variables are actually consumed at build time or runtime (`process.env.VAR`, `import.meta.env.VAR`).
+
+**envtarayici** verifies that these three layers stay in sync:
+- Detects variables defined in the contract but missing from the developer's local environment.
+- Detects variables used in source code that were never documented in the contract.
+- Catches sensitive secrets accidentally exposed to client-side bundles via public prefixes.
+- Flags local environment files that were mistakenly committed to the Git index.
+
+---
+
+## What envtarayici Does & Does Not Do
+
+### Included
+- **Contract Verification:** Ensures required template variables exist locally.
+- **AST Source Code Scanning:** Identifies static `process.env` and `import.meta.env` references using Babel AST.
+- **Client Exposure Heuristics:** Flags unambiguous secret patterns in `NEXT_PUBLIC_*`, `VITE_*`, and other client prefixes.
+- **Git Index Tracking Checks:** Identifies whether local `.env` files are tracked in the Git repository index.
+- **Terminal & JSON Reporters:** Human-readable formatted summaries and machine-readable JSON for tooling.
+- **CI-Friendly Exit Codes:** Standardized exit codes (`0`, `1`, `2`) for CI/CD pipelines and pre-commit hooks.
+
+### Not Included (Out of Scope)
+- **No AI / LLM Dependency:** Pure deterministic static analysis running entirely on your machine.
+- **No Production / Cloud Resolution:** Does not resolve production environments or connect to secret managers (AWS Secrets Manager, Vault, Doppler, etc.).
+- **No Automatic Fixes (`--fix`):** Never modifies, overwrites, or rewrites your source code or `.env` files.
+- **No Git History Secret Scanning:** Checks only the current working tree and Git index; does not crawl historical git commits (use dedicated tools like Gitleaks for git history).
+- **No Runtime Resolution:** Does not execute your application code or evaluate runtime environment variables.
 
 ---
 
 ## Quick Start
 
-Run instantly in any Node.js / TypeScript project without installing:
+Run directly in any Node.js / TypeScript project without installation:
 
 ```bash
-npx env-doctor
+npx envtarayici
 ```
 
 ### Options
 
 ```bash
-# Plain-text output for CI pipelines
-npx env-doctor --ci
+# Plain-text output for CI/CD pipelines
+npx envtarayici --ci
 
 # Machine-readable JSON output
-npx env-doctor --json
+npx envtarayici --json
 
-# Specify a custom directory
-npx env-doctor --cwd ./apps/web
+# Analyze a specific directory
+npx envtarayici --cwd ./apps/web
 
 # View help or version
-npx env-doctor --help
-npx env-doctor --version
+npx envtarayici --help
+npx envtarayici --version
 ```
 
 ---
@@ -45,7 +71,7 @@ npx env-doctor --version
 ## Example Output
 
 ```text
-ENV DOCTOR
+ENVTARAYICI
 ──────────────────────────────────────────────────
 CRITICAL:
   🔴 NEXT_PUBLIC_STRIPE_SECRET_KEY (.env.local:12)
@@ -76,7 +102,7 @@ Status: FAILED (1 Critical, 1 Error, 1 Warning)
 | :--- | :--- | :--- |
 | `PUBLIC_SECRET_EXPOSURE` | **CRITICAL** | Client prefix (`NEXT_PUBLIC_`, `VITE_`, `PUBLIC_`, `GATSBY_`, `NUXT_PUBLIC_`, `EXPO_PUBLIC_`) combined with unambiguous secret terms (`SECRET`, `PASSWORD`, `PRIVATE`, `DATABASE_URL`, `SERVICE_ROLE_KEY`, `CREDENTIALS`, etc.). |
 | `GIT_TRACKED` | **CRITICAL** | Local `.env` or `.env.local` files are actively tracked in the Git repository index. |
-| `MISSING_FROM_LOCAL` | **ERROR** | A required variable defined in the contract (`.env.example`, `.env.sample`, or `.env.template`) is missing from `.env` and `.env.local`. |
+| `MISSING_FROM_LOCAL` | **ERROR** | A required variable defined in the contract (`.env.example`, `.env.sample`, or `.env.template`) is missing from local `.env` and `.env.local`. |
 | `UNDOCUMENTED_IN_EXAMPLE` | **WARNING** | A statically referenced variable in source code is not documented in `.env.example`. |
 | `POTENTIAL_EXPOSURE` | **WARNING** | A public variable uses ambiguous keywords (`KEY`, `TOKEN`, `AUTH`) without an explicit allowlist pattern. |
 | `DYNAMIC_ACCESS` | **INFO** | Computed property access such as `process.env[dynamicKey]` that cannot be statically verified. |
@@ -89,18 +115,18 @@ Legitimate client-side tokens (e.g., `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBL
 
 ## Security Model: Metadata-Only Analysis
 
-ENV Doctor adheres to a strict zero-retention policy regarding environment values:
-1. **Values Discarded:** The parser extracts only variable names (`KEY`), line numbers, and file paths. Values are discarded immediately.
-2. **Never Stored or Printed:** Plaintext secrets never enter data structures (`KeyEntry`, `Finding`, `AnalysisResult`) and are never written to stdout, stderr, logs, or JSON outputs.
+Environment values are not retained, stored, logged, or included in findings or reports:
+1. **Values Discarded:** During line extraction, variable values are discarded immediately after determining presence (`hasValue`).
+2. **Never Emitted:** Plaintext secrets never enter data structures (`KeyEntry`, `Finding`, `AnalysisResult`) and are never printed to terminal reports, error messages, logs, or JSON outputs.
 
 ---
 
 ## CI / CD Integration & Exit Codes
 
-Add ENV Doctor as a step in your GitHub Actions or pre-commit workflow:
+Add **envtarayici** to your GitHub Actions or pre-commit workflow:
 
 ```yaml
-# .github/workflows/env-doctor.yml
+# .github/workflows/envtarayici.yml
 name: Environment Contract Audit
 
 on: [push, pull_request]
@@ -113,14 +139,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npx env-doctor --ci
+      - run: npx envtarayici --ci
 ```
 
 ### Exit Codes
 
-- `0`: **PASSED** — All required variables are present and no critical security issues were detected. (Warnings/Info do not fail the build).
+- `0`: **PASSED** — All required contract variables are present and no critical security issues were detected. (Warnings and Info do not fail the build).
 - `1`: **FAILED** — One or more `CRITICAL` security violations or `ERROR` missing contract variables were found.
 - `2`: **FATAL** — Runtime execution error (e.g. invalid arguments or file permission issues).
+
+---
+
+## Known Limitations
+
+1. **Aliased Environment Access:** Indirect references such as `const env = process.env; env.FOO` are not traced to keep AST scanning fast and free of heavy scope-analysis dependencies.
+2. **Single-File Duplicate Keys:** If a single `.env` file defines the same key multiple times, the last entry's line number is preserved without emitting a duplicate diagnostic.
+3. **Performance:** Analysis duration is determined by project size, file count, and disk I/O performance.
 
 ---
 

@@ -9,7 +9,7 @@ describe('fixture projects integration', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'env-doctor-fixture-run-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'envtarayici-fixture-run-'));
   });
 
   afterEach(async () => {

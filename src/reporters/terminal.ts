@@ -16,7 +16,7 @@ function formatLocation(loc?: { file: string; line?: number }): string {
 export function formatTerminalReport(result: AnalysisResult, isCi = false): string {
   const lines: string[] = [];
 
-  const title = isCi ? 'ENV DOCTOR' : pc.bold(pc.cyan('ENV DOCTOR'));
+  const title = isCi ? 'ENVTARAYICI' : pc.bold(pc.cyan('ENVTARAYICI'));
   const divider = pc.dim('─'.repeat(50));
 
   lines.push('');

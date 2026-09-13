@@ -12,7 +12,7 @@ describe('checkGitTrackedEnvFiles', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'env-doctor-git-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'envtarayici-git-'));
   });
 
   afterEach(async () => {

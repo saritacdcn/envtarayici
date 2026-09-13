@@ -65,7 +65,7 @@ describe('reporters', () => {
   it('formats terminal output with correct sections and failed status', () => {
     const output = formatTerminalReport(mockFailedResult, true);
 
-    expect(output).toContain('ENV DOCTOR');
+    expect(output).toContain('ENVTARAYICI');
     expect(output).toContain('CRITICAL:');
     expect(output).toContain('NEXT_PUBLIC_SECRET_KEY');
     expect(output).toContain('ERRORS:');
@@ -79,7 +79,7 @@ describe('reporters', () => {
   it('formats terminal output for passed status', () => {
     const output = formatTerminalReport(mockPassedResult, true);
 
-    expect(output).toContain('ENV DOCTOR');
+    expect(output).toContain('ENVTARAYICI');
     expect(output).toContain('Status: PASSED');
     expect(output).not.toContain('CRITICAL:');
     expect(output).not.toContain('ERRORS:');

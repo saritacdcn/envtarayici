@@ -14,7 +14,7 @@ describe('discovery', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'env-doctor-discovery-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'envtarayici-discovery-'));
   });
 
   afterEach(async () => {

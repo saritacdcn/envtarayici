@@ -8,7 +8,7 @@ describe('analyzer integration', () => {
   let projectDir: string;
 
   beforeEach(async () => {
-    projectDir = await mkdtemp(join(tmpdir(), 'env-doctor-project-'));
+    projectDir = await mkdtemp(join(tmpdir(), 'envtarayici-project-'));
   });
 
   afterEach(async () => {

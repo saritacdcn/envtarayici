@@ -7,11 +7,11 @@ import { formatTerminalReport } from './reporters/terminal.js';
 const VERSION = '0.1.0';
 
 export const HELP_TEXT = `
-ENV DOCTOR (v${VERSION})
+ENVTARAYICI (v${VERSION})
 Static environment variable & contract linter for Node.js / TypeScript.
 
 USAGE:
-  $ npx env-doctor [options]
+  $ npx envtarayici [options]
 
 OPTIONS:
   --ci          Run in CI mode (plain text output)
