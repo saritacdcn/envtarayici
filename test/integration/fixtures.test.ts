@@ -1,12 +1,30 @@
-import { describe, it, expect } from 'vitest';
-import { resolve } from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { resolve, join } from 'node:path';
+import { mkdtemp, rm, cp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { analyzeProject } from '../../src/core/analyzer.js';
 
 describe('fixture projects integration', () => {
   const fixturesRoot = resolve(__dirname, '../fixtures');
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'env-doctor-fixture-run-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  async function prepareFixture(fixtureName: string): Promise<string> {
+    const srcDir = resolve(fixturesRoot, fixtureName);
+    const targetDir = join(tempDir, fixtureName);
+    await cp(srcDir, targetDir, { recursive: true });
+    return targetDir;
+  }
 
   it('01-clean-project: passes cleanly with 0 findings', async () => {
-    const cwd = resolve(fixturesRoot, '01-clean-project');
+    const cwd = await prepareFixture('01-clean-project');
     const result = await analyzeProject(cwd);
 
     expect(result.status).toBe('PASSED');
@@ -16,7 +34,7 @@ describe('fixture projects integration', () => {
   });
 
   it('02-missing-vars: detects missing REDIS_URL and fails with ERROR', async () => {
-    const cwd = resolve(fixturesRoot, '02-missing-vars');
+    const cwd = await prepareFixture('02-missing-vars');
     const result = await analyzeProject(cwd);
 
     expect(result.status).toBe('FAILED');
@@ -28,7 +46,7 @@ describe('fixture projects integration', () => {
   });
 
   it('03-undocumented-vars: detects undocumented code variable with WARNING and passes', async () => {
-    const cwd = resolve(fixturesRoot, '03-undocumented-vars');
+    const cwd = await prepareFixture('03-undocumented-vars');
     const result = await analyzeProject(cwd);
 
     expect(result.status).toBe('PASSED');
@@ -40,7 +58,7 @@ describe('fixture projects integration', () => {
   });
 
   it('04-public-leak: detects client bundle secret leak and fails with CRITICAL', async () => {
-    const cwd = resolve(fixturesRoot, '04-public-leak');
+    const cwd = await prepareFixture('04-public-leak');
     const result = await analyzeProject(cwd);
 
     expect(result.status).toBe('FAILED');
@@ -52,7 +70,7 @@ describe('fixture projects integration', () => {
   });
 
   it('05-edge-cases: accurately handles comments, string literals, destructuring, and dynamic access', async () => {
-    const cwd = resolve(fixturesRoot, '05-edge-cases');
+    const cwd = await prepareFixture('05-edge-cases');
     const result = await analyzeProject(cwd);
 
     expect(result.status).toBe('PASSED');
@@ -73,7 +91,7 @@ describe('fixture projects integration', () => {
   });
 
   it('06-whitelist-project: treats allowed public tokens as legitimate and passes', async () => {
-    const cwd = resolve(fixturesRoot, '06-whitelist-project');
+    const cwd = await prepareFixture('06-whitelist-project');
     const result = await analyzeProject(cwd);
 
     expect(result.status).toBe('PASSED');
