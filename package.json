@@ -27,6 +27,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Saritacdcn/env-doctor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Saritacdcn/env-doctor/issues"
+  },
+  "homepage": "https://github.com/Saritacdcn/env-doctor#readme",
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
