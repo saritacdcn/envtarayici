@@ -4,12 +4,12 @@ import { CodeReference } from './types.js';
 import { walkAst } from './utils/ast-walker.js';
 
 /**
- * Checks if a MemberExpression node represents `process.env`.
+ * Checks if a MemberExpression or OptionalMemberExpression node represents `process.env`.
  */
 function isProcessEnv(node: any): boolean {
   return (
     node &&
-    node.type === 'MemberExpression' &&
+    (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') &&
     !node.computed &&
     node.object?.type === 'Identifier' &&
     node.object.name === 'process' &&
@@ -19,12 +19,12 @@ function isProcessEnv(node: any): boolean {
 }
 
 /**
- * Checks if a MemberExpression node represents `import.meta.env`.
+ * Checks if a MemberExpression or OptionalMemberExpression node represents `import.meta.env`.
  */
 function isImportMetaEnv(node: any): boolean {
   return (
     node &&
-    node.type === 'MemberExpression' &&
+    (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') &&
     !node.computed &&
     node.object?.type === 'MetaProperty' &&
     node.object.meta?.name === 'import' &&
@@ -59,8 +59,9 @@ export function scanSourceCode(content: string, filePath: string): CodeReference
   const references: CodeReference[] = [];
 
   walkAst(ast, (node) => {
-    // 1. Direct Member Expression: process.env.FOO or process.env['FOO'] or import.meta.env.FOO
-    if (node.type === 'MemberExpression') {
+    // 1. Direct Member Expression & Optional Chaining:
+    // process.env.FOO, process.env?.FOO, process.env['FOO'], import.meta.env.FOO, import.meta.env?.FOO
+    if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
       const isProc = isProcessEnv(node.object);
       const isMeta = isImportMetaEnv(node.object);
 
@@ -68,7 +69,7 @@ export function scanSourceCode(content: string, filePath: string): CodeReference
         const line = node.loc?.start?.line ?? 1;
 
         if (!node.computed && node.property?.type === 'Identifier') {
-          // process.env.FOO
+          // process.env.FOO or process.env?.FOO
           references.push({
             variableName: node.property.name,
             isDynamic: false,
@@ -81,8 +82,20 @@ export function scanSourceCode(content: string, filePath: string): CodeReference
             isDynamic: false,
             location: { file: filePath, line },
           });
+        } else if (
+          node.computed &&
+          node.property?.type === 'TemplateLiteral' &&
+          node.property.expressions.length === 0 &&
+          node.property.quasis.length > 0
+        ) {
+          // process.env[`FOO`] (static template literal without expressions)
+          references.push({
+            variableName: node.property.quasis[0].value.raw,
+            isDynamic: false,
+            location: { file: filePath, line },
+          });
         } else if (node.computed) {
-          // process.env[dynamicKey]
+          // process.env[dynamicKey] or process.env[`DB_${suffix}`]
           references.push({
             variableName: undefined,
             isDynamic: true,
@@ -113,6 +126,18 @@ export function scanSourceCode(content: string, filePath: string): CodeReference
               // const { ['FOO']: bar } = process.env
               references.push({
                 variableName: prop.key.value,
+                isDynamic: false,
+                location: { file: filePath, line: prop.loc?.start?.line ?? line },
+              });
+            } else if (
+              prop.computed &&
+              prop.key?.type === 'TemplateLiteral' &&
+              prop.key.expressions.length === 0 &&
+              prop.key.quasis.length > 0
+            ) {
+              // const { [`FOO`]: bar } = process.env
+              references.push({
+                variableName: prop.key.quasis[0].value.raw,
                 isDynamic: false,
                 location: { file: filePath, line: prop.loc?.start?.line ?? line },
               });

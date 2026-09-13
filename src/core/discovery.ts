@@ -63,7 +63,7 @@ export async function discoverLocalEnvFiles(cwd: string): Promise<string[]> {
 export async function loadContract(contractFile: string, cwd: string): Promise<EnvContract> {
   const fullPath = join(cwd, contractFile);
   const content = await readFile(fullPath, 'utf-8');
-  const keys = extractEnvKeys(content, contractFile);
+  const keys = extractEnvKeys(content, contractFile, { allowBareKeys: true });
 
   return {
     contractFile,

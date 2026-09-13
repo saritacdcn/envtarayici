@@ -1,10 +1,23 @@
 import { KeyEntry } from './types.js';
 
+export interface ExtractOptions {
+  /**
+   * When true, lines containing a bare valid identifier without an '=' sign
+   * (e.g. `DATABASE_URL`) are treated as valid keys with `hasValue: false`.
+   * Used specifically for contract template files (.env.example).
+   */
+  allowBareKeys?: boolean;
+}
+
 /**
  * Extracts environment variable keys and line numbers from .env content.
  * Does NOT store values to ensure secrets are never retained in data structures.
  */
-export function extractEnvKeys(content: string, sourceFile: string): Map<string, KeyEntry> {
+export function extractEnvKeys(
+  content: string,
+  sourceFile: string,
+  options: ExtractOptions = {}
+): Map<string, KeyEntry> {
   const result = new Map<string, KeyEntry>();
   const lines = content.split(/\r?\n/);
 
@@ -51,6 +64,18 @@ export function extractEnvKeys(content: string, sourceFile: string): Map<string,
     // Check for KEY= pattern
     const equalsIndex = lineContent.indexOf('=');
     if (equalsIndex <= 0) {
+      if (
+        options.allowBareKeys &&
+        equalsIndex === -1 &&
+        /^[A-Za-z_][A-Za-z0-9_]*$/.test(lineContent)
+      ) {
+        result.set(lineContent, {
+          key: lineContent,
+          line: lineNumber,
+          sourceFile,
+          hasValue: false,
+        });
+      }
       continue;
     }
 

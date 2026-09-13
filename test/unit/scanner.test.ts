@@ -123,13 +123,43 @@ describe('scanSourceCode', () => {
     expect(refs[0].variableName).toBe('NEXT_PUBLIC_APP_TITLE');
   });
 
-  it('skips parsing completely when file does not contain env tokens (fast pre-filter)', () => {
+  it('detects optional chaining references (process.env?.FOO and import.meta.env?.VITE_URL)', () => {
     const code = `
-      export function add(a: number, b: number) {
-        return a + b;
-      }
+      const port = process.env?.FOO;
+      const apiUrl = import.meta.env?.VITE_URL;
     `;
-    const refs = scanSourceCode(code, 'math.ts');
-    expect(refs).toHaveLength(0);
+    const refs = scanSourceCode(code, 'optional.ts');
+
+    expect(refs).toHaveLength(2);
+    expect(refs[0]).toEqual({
+      variableName: 'FOO',
+      isDynamic: false,
+      location: { file: 'optional.ts', line: 2 },
+    });
+    expect(refs[1]).toEqual({
+      variableName: 'VITE_URL',
+      isDynamic: false,
+      location: { file: 'optional.ts', line: 3 },
+    });
+  });
+
+  it('treats static template literals without expressions as static references, but dynamic template literals as dynamic', () => {
+    const code = `
+      const db = process.env[\`DATABASE_URL\`];
+      const dynamic = process.env[\`DB_\${suffix}\`];
+    `;
+    const refs = scanSourceCode(code, 'templates.ts');
+
+    expect(refs).toHaveLength(2);
+    expect(refs[0]).toEqual({
+      variableName: 'DATABASE_URL',
+      isDynamic: false,
+      location: { file: 'templates.ts', line: 2 },
+    });
+    expect(refs[1]).toEqual({
+      variableName: undefined,
+      isDynamic: true,
+      location: { file: 'templates.ts', line: 3 },
+    });
   });
 });

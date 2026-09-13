@@ -117,16 +117,34 @@ AFTER_MULTILINE=valid
     expect(result.get('VAR_TWO')?.line).toBe(2);
   });
 
-  it('ignores comment lines and inline comments', () => {
+  it('supports bare identifier keys without equals in contract mode but ignores them in local mode', () => {
     const content = `
-# Full line comment
-FOO=bar # inline comment
-# Another comment
-BAZ=qux
+# Contract definitions
+PORT=3000
+DATABASE_URL
+REDIS_URL
 `;
-    const result = extractEnvKeys(content, '.env');
-    expect(result.size).toBe(2);
-    expect(result.has('FOO')).toBe(true);
-    expect(result.has('BAZ')).toBe(true);
+    // 1. Contract mode: allowBareKeys = true
+    const contractResult = extractEnvKeys(content, '.env.example', { allowBareKeys: true });
+    expect(contractResult.size).toBe(3);
+    expect(contractResult.get('DATABASE_URL')).toEqual({
+      key: 'DATABASE_URL',
+      line: 4,
+      sourceFile: '.env.example',
+      hasValue: false,
+    });
+    expect(contractResult.get('REDIS_URL')).toEqual({
+      key: 'REDIS_URL',
+      line: 5,
+      sourceFile: '.env.example',
+      hasValue: false,
+    });
+
+    // 2. Local mode: allowBareKeys = false (default)
+    const localResult = extractEnvKeys(content, '.env');
+    expect(localResult.size).toBe(1);
+    expect(localResult.has('PORT')).toBe(true);
+    expect(localResult.has('DATABASE_URL')).toBe(false);
+    expect(localResult.has('REDIS_URL')).toBe(false);
   });
 });
