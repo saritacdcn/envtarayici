@@ -17,7 +17,7 @@
   ],
   "type": "module",
   "bin": {
-    "envtarayici": "./dist/cli.js"
+    "envtarayici": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,7 +29,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Saritacdcn/envtarayici.git"
+    "url": "git+https://github.com/Saritacdcn/envtarayici.git"
   },
   "bugs": {
     "url": "https://github.com/Saritacdcn/envtarayici/issues"
