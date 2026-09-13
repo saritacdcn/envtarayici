@@ -1,60 +1,119 @@
-# envtarayici 🔍
+# envtarayici
 
 [English](README.md) | [Türkçe](README.tr.md) | [Español](README.es.md) | [简体中文](README.zh-CN.md)
 
-> Linter estático de variables de entorno y contratos para proyectos Node.js y TypeScript.
-
-**envtarayici** audita tus contratos de entorno (`.env.example`), archivos de desarrollo local (`.env`, `.env.local`) y código fuente sin requerir modificaciones en el código ni dependencias de servicios externos.
-
----
-
-## El Concepto de Contrato
-
-En el desarrollo fullstack moderno, la configuración del entorno opera en tres capas diferenciadas:
-
-1. **El Contrato (`.env.example`, `.env.sample`, `.env.template`):** La línea base declarada que define qué variables requiere la aplicación para ejecutarse.
-2. **El Entorno Local (`.env`, `.env.local`):** Los archivos de entorno local del desarrollador que contienen valores de configuración local.
-3. **El Código Fuente (`src/**/*.{ts,js,tsx,jsx}`):** Donde las variables se consumen efectivamente en tiempo de compilación o ejecución (`process.env.VAR`, `import.meta.env.VAR`).
-
-**envtarayici** verifica que estas tres capas se mantengan sincronizadas:
-- Detecta variables definidas en el contrato pero ausentes en el entorno local del desarrollador.
-- Detecta variables utilizadas en el código fuente que nunca fueron documentadas en el contrato.
-- Detecta secretos sensibles expuestos accidentalmente a paquetes del lado del cliente (client-side bundles) mediante prefijos públicos.
-- Señala archivos de entorno local que fueron rastreados por error en el índice de Git.
-
----
-
-## Qué hace y qué no hace envtarayici
-
-### Incluido
-- **Verificación de Contratos:** Garantiza que las variables de plantilla requeridas existan localmente.
-- **Escaneo de Código Fuente con AST:** Identifica referencias estáticas a `process.env` e `import.meta.env` mediante Babel AST.
-- **Heurísticas de Exposición en el Cliente:** Señala patrones inequívocos de secretos en `NEXT_PUBLIC_*`, `VITE_*` y otros prefijos de cliente.
-- **Comprobación de Seguimiento en Git:** Identifica si los archivos `.env` locales están siendo rastreados en el índice del repositorio Git.
-- **Informes en Terminal y JSON:** Resúmenes formateados legibles para humanos y salida JSON estructurada para herramientas de automatización.
-- **Códigos de Salida Aptos para CI:** Códigos de salida estandarizados (`0`, `1`, `2`) para flujos de CI/CD y hooks de pre-commit.
-
-### No Incluido (Fuera de Alcance)
-- **Sin Dependencia de IA / LLM:** Análisis estático determinista puro ejecutado íntegramente en tu máquina local.
-- **Sin Resolución de Producción / Nube:** No resuelve entornos de producción ni se conecta a gestores de secretos (AWS Secrets Manager, Vault, Doppler, etc.).
-- **Sin Correcciones Automáticas (`--fix`):** Nunca modifica, sobrescribe ni reescribe tu código fuente o archivos `.env`.
-- **Sin Escaneo de Secretos en el Historial de Git:** Solo inspecciona el árbol de trabajo actual y el índice de Git; no recorre commits históricos (utiliza herramientas dedicadas como Gitleaks para el historial de git).
-- **Sin Resolución en Tiempo de Ejecución:** No ejecuta el código de tu aplicación ni evalúa variables de entorno en runtime.
-
----
-
-## Inicio Rápido
-
-Ejecuta directamente en cualquier proyecto Node.js / TypeScript sin necesidad de instalación previa:
+Linter estático de variables de entorno y contratos para Node.js / TypeScript.
 
 ```bash
 npx envtarayici
 ```
 
-### Opciones
+Detecta discrepancias de variables de entorno entre tu `.env.example`, tu entorno local y tu código fuente antes de que se conviertan en un problema en tiempo de ejecución.
+
+---
+
+## ¿Qué Detecta?
+
+Las variables de entorno en aplicaciones fullstack se desajustan fácilmente entre tres ubicaciones: tu contrato de ejemplo (`.env.example`), tus archivos de desarrollo local (`.env`, `.env.local`) y tu código real (`src/`).
+
+Estos son los tres problemas más comunes que detecta **envtarayici**:
+
+### 1. Código → Contrato (Documentación Faltante)
+
+Un desarrollador añade una variable en el código fuente:
+
+```typescript
+// src/db.ts
+const dbUrl = process.env.DATABASE_URL;
+```
+
+...pero olvida documentarla en `.env.example`. Es posible que otros desarrolladores no sepan que el código espera esta variable.
+
+**envtarayici lo señala:**
+```text
+WARNINGS:
+  ⚠️  DATABASE_URL (src/db.ts:2)
+     Variable 'DATABASE_URL' is used in source code but missing from .env.example.
+```
+
+### 2. Contrato → Local (Variable Local Faltante)
+
+Un compañero de equipo añade una nueva variable requerida a `.env.example`:
+
+```text
+DATABASE_URL=postgresql://localhost:5432/mydb
+```
+
+...pero tu archivo local `.env` o `.env.local` nunca fue actualizado.
+
+**envtarayici lo señala:**
+```text
+ERRORS:
+  ❌ DATABASE_URL (.env.example:1)
+     Variable 'DATABASE_URL' is documented in .env.example but missing in local environment (.env).
+```
+
+### 3. Public Secret Exposure
+
+Una clave secreta se nombra accidentalmente con un prefijo de empaquetado del lado del cliente (`NEXT_PUBLIC_`, `VITE_`, `PUBLIC_`, etc.):
+
+```text
+# .env.local
+NEXT_PUBLIC_DATABASE_PASSWORD=supersecret
+```
+
+Los frameworks pueden exponer variables con prefijos públicos a los paquetes del lado del cliente (client-side bundles).
+
+**envtarayici lo señala:**
+```text
+CRITICAL:
+  🔴 NEXT_PUBLIC_DATABASE_PASSWORD (.env.local:1)
+     Variable 'NEXT_PUBLIC_DATABASE_PASSWORD' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'PASSWORD'. Secrets must never be exposed to client bundles.
+```
+
+---
+
+## ¿Qué Comprueba?
+
+- **Verificación de Contrato (`MISSING_FROM_LOCAL` / ERROR):** Variables declaradas en `.env.example` (o `.env.sample`, `.env.template`) que faltan en los archivos locales `.env` y `.env.local`.
+- **Cobertura en Código Fuente (`UNDOCUMENTED_IN_EXAMPLE` / WARNING):** Variables de entorno referenciadas estáticamente en el código fuente que no están documentadas en `.env.example`.
+- **Exposición Pública de Secretos (`PUBLIC_SECRET_EXPOSURE` / CRITICAL):** Prefijos de cliente (`NEXT_PUBLIC_`, `VITE_`, `PUBLIC_`, `GATSBY_`, `NUXT_PUBLIC_`, `EXPO_PUBLIC_`) combinados con términos de secretos inequívocos (`SECRET`, `PASSWORD`, `PRIVATE`, `DATABASE_URL`, `SERVICE_ROLE_KEY`, `CREDENTIALS`, etc.).
+- **Exposición Potencial (`POTENTIAL_EXPOSURE` / WARNING):** Variables públicas que contienen identificadores ambiguos (`KEY`, `TOKEN`, `AUTH`) que no forman parte de la lista de permitidos legítimos (`ANON_KEY`, `PUBLISHABLE_KEY`, `CLIENT_ID`, etc.).
+- **Rastreo en Git (`GIT_TRACKED` / CRITICAL):** Archivos locales `.env` o `.env.local` rastreados en el índice del repositorio Git.
+- **Referencias Dinámicas (`DYNAMIC_ACCESS` / INFO):** Accesos a propiedades calculadas como `process.env[dynamicKey]` que no pueden verificarse estáticamente.
+
+---
+
+## Qué Hace y Qué No Hace
+
+### Lo que hace
+- **Comprobación estática de contratos:** Compara `.env.example`, `.env` y las referencias en el código fuente sin ejecutar tu aplicación.
+- **Análisis con AST:** Utiliza el analizador Babel AST para identificar referencias reales en código ignorando cadenas de texto, markdown o comentarios.
+- **Heurística de exposición en cliente:** Señala fugas comunes de credenciales mediante prefijos de cliente.
+- **Cero configuración:** Funciona directamente ejecutando `npx envtarayici`.
+- **Apto para CI:** Códigos de salida estandarizados (`0`, `1`, `2`) y salida JSON estructurada para herramientas de automatización.
+
+### Lo que no hace
+- **Sin dependencia de IA / LLM:** Análisis estático determinista ejecutado 100% en local.
+- **Sin integración con la nube o gestores de secretos:** No se conecta a AWS Secrets Manager, HashiCorp Vault, Doppler, etc.
+- **Sin resolución en runtime / producción:** No resuelve entornos de producción, proveedores en la nube ni precedencias de ejecución.
+- **Sin corrección automática (`--fix`):** Nunca modifica ni sobrescribe tus archivos de código fuente o archivos `.env`.
+- **Sin escaneo de historial de Git:** Solo inspecciona los archivos actuales y el índice de Git; no analiza el historial de commits anteriores (usa herramientas como Gitleaks para commits históricos).
+
+---
+
+## Inicio Rápido
+
+Ejecuta en la raíz de cualquier proyecto Node.js / TypeScript:
 
 ```bash
-# Salida en texto plano para flujos de CI/CD
+npx envtarayici
+```
+
+### Opciones de CLI
+
+```bash
+# Salida en texto plano para registros de CI/CD
 npx envtarayici --ci
 
 # Salida en formato JSON legible por máquina
@@ -63,7 +122,7 @@ npx envtarayici --json
 # Analizar un directorio específico
 npx envtarayici --cwd ./apps/web
 
-# Ver ayuda o versión
+# Ver ayuda y versión
 npx envtarayici --help
 npx envtarayici --version
 ```
@@ -76,19 +135,19 @@ npx envtarayici --version
 ENVTARAYICI
 ──────────────────────────────────────────────────
 CRITICAL:
-  🔴 NEXT_PUBLIC_STRIPE_SECRET_KEY (.env.local:12)
-     Variable 'NEXT_PUBLIC_STRIPE_SECRET_KEY' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'SECRET'. Secrets must never be exposed to client bundles.
+  🔴 NEXT_PUBLIC_DATABASE_PASSWORD (.env.local:1)
+     Variable 'NEXT_PUBLIC_DATABASE_PASSWORD' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'PASSWORD'. Secrets must never be exposed to client bundles.
 
 ERRORS:
-  ❌ DATABASE_URL (.env.example:3)
+  ❌ DATABASE_URL (.env.example:2)
      Variable 'DATABASE_URL' is documented in .env.example but missing in local environment (.env).
 
 WARNINGS:
-  ⚠️  NEW_FEATURE_FLAG (src/api/auth.ts:15)
-     Variable 'NEW_FEATURE_FLAG' is used in source code but missing from .env.example.
+  ⚠️  PORT (src/index.ts:15)
+     Variable 'PORT' is used in source code but missing from .env.example.
 
 INFO:
-  ℹ️  Dynamic environment variable access detected. Static analysis cannot verify dynamic property names. (src/utils/env.ts:8)
+  ℹ️  Dynamic environment variable access detected. Static analysis cannot verify dynamic property names. (src/config.ts:8)
 ──────────────────────────────────────────────────
 Variables documented: 14 | Local variables: 13 | Code variables: 14
 Files scanned: 28
@@ -98,34 +157,103 @@ Status: FAILED (1 Critical, 1 Error, 1 Warning)
 
 ---
 
-## Reglas y Lógica de Detección
+## Salida en Formato JSON
 
-| Código de Regla | Severidad | Descripción |
-| :--- | :--- | :--- |
-| `PUBLIC_SECRET_EXPOSURE` | **CRITICAL** | Prefijo de cliente (`NEXT_PUBLIC_`, `VITE_`, `PUBLIC_`, `GATSBY_`, `NUXT_PUBLIC_`, `EXPO_PUBLIC_`) combinado con términos inequívocos de secretos (`SECRET`, `PASSWORD`, `PRIVATE`, `DATABASE_URL`, `SERVICE_ROLE_KEY`, `CREDENTIALS`, etc.). |
-| `GIT_TRACKED` | **CRITICAL** | Archivos locales `.env` o `.env.local` rastreados activamente en el índice del repositorio Git. |
-| `MISSING_FROM_LOCAL` | **ERROR** | Una variable requerida definida en el contrato (`.env.example`, `.env.sample` o `.env.template`) no está presente en los archivos locales `.env` y `.env.local`. |
-| `UNDOCUMENTED_IN_EXAMPLE` | **WARNING** | Una variable referenciada estáticamente en el código fuente no está documentada en `.env.example`. |
-| `POTENTIAL_EXPOSURE` | **WARNING** | Una variable pública utiliza palabras clave ambiguas (`KEY`, `TOKEN`, `AUTH`) sin coincidir con un patrón explícito en la lista de permitidos. |
-| `DYNAMIC_ACCESS` | **INFO** | Acceso a propiedades calculadas como `process.env[dynamicKey]` que no puede verificarse estáticamente. |
+Usa `--json` para herramientas automáticas o scripts de CI personalizados:
 
-### Lista de Permitidos de Tokens Públicos (Allowlist)
+```bash
+npx envtarayici --json
+```
 
-Los tokens legítimos del lado del cliente (p. ej., `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN`, `*_CLIENT_ID`) están en la lista de permitidos y no generan advertencias de falso positivo.
+```json
+{
+  "status": "FAILED",
+  "findings": [
+    {
+      "code": "PUBLIC_SECRET_EXPOSURE",
+      "severity": "CRITICAL",
+      "variableName": "NEXT_PUBLIC_DATABASE_PASSWORD",
+      "message": "Variable 'NEXT_PUBLIC_DATABASE_PASSWORD' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'PASSWORD'. Secrets must never be exposed to client bundles.",
+      "location": {
+        "file": ".env.local",
+        "line": 1
+      }
+    },
+    {
+      "code": "MISSING_FROM_LOCAL",
+      "severity": "ERROR",
+      "variableName": "DATABASE_URL",
+      "message": "Variable 'DATABASE_URL' is documented in .env.example but missing in local environment (.env).",
+      "location": {
+        "file": ".env.example",
+        "line": 2
+      }
+    }
+  ],
+  "summary": {
+    "contractVariablesCount": 14,
+    "localVariablesCount": 13,
+    "codeVariablesCount": 14,
+    "filesScannedCount": 28,
+    "criticalCount": 1,
+    "errorCount": 1,
+    "warningCount": 0,
+    "infoCount": 0
+  }
+}
+```
 
 ---
 
-## Modelo de Seguridad: Análisis Exclusivo de Metadatos
+## Códigos de Salida (Exit Codes)
 
-Los valores de las variables de entorno no se retienen, almacenan, registran ni se incluyen en hallazgos o informes:
-1. **Valores Descartados:** Durante la extracción de líneas, los valores de las variables se descartan inmediatamente tras determinar su presencia (`hasValue`).
-2. **Nunca Emitidos:** Los secretos en texto plano nunca entran en las estructuras de datos (`KeyEntry`, `Finding`, `AnalysisResult`) y jamás se imprimen en informes de terminal, mensajes de error, registros ni salidas JSON.
+| Código | Estado | Significado |
+| :---: | :--- | :--- |
+| `0` | **PASSED** | Todas las variables requeridas por el contrato están presentes localmente y no se detectaron problemas críticos de seguridad. (Las advertencias e informaciones no fallan la comprobación). |
+| `1` | **FAILED** | Se detectaron una o más violaciones de seguridad `CRITICAL` o variables de contrato ausentes de nivel `ERROR`. |
+| `2` | **FATAL** | Error de ejecución (p. ej., argumentos inválidos o archivos inaccesibles). |
 
 ---
 
-## Integración en CI / CD y Códigos de Salida
+## Sintaxis de Código Fuente Soportada
 
-Agrega **envtarayici** a tus GitHub Actions o a tu flujo de trabajo de pre-commit:
+El analizador AST procesa archivos JavaScript, TypeScript y JSX/TSX en busca de referencias estáticas:
+
+```javascript
+// Acceso directo a propiedades y encadenamiento opcional
+process.env.PORT
+process.env?.PORT
+process.env['PORT']
+process.env["PORT"]
+process.env[`PORT`] // Template literal estático sin expresiones
+
+// Sintaxis Vite / ESM
+import.meta.env.VITE_API_URL
+import.meta.env?.VITE_API_URL
+import.meta.env['VITE_API_URL']
+
+// Desestructuración de objetos
+const { PORT, DATABASE_URL } = process.env
+const { API_KEY: myKey } = process.env
+
+// Acceso dinámico (marcado como DYNAMIC_ACCESS / INFO)
+process.env[dynamicKey]
+process.env[`DB_${suffix}`]
+```
+
+---
+
+## Seguridad y Manejo de Datos
+
+- **Sin Retención de Valores:** Los valores de las variables de entorno nunca se almacenan en estructuras de datos en memoria (`KeyEntry`, `Finding`, `AnalysisResult`), no se registran en logs y jamás se incluyen en informes de terminal o JSON.
+- **Lectura Transitoria:** El contenido sin procesar de los archivos `.env` se lee de forma transitoria por el proceso local de Node.js únicamente para analizar los nombres de las claves y comprobar la presencia de valores (`hasValue`). Los valores se descartan inmediatamente tras la extracción de líneas.
+- **Ejecución Local:** Sin telemetría, sin peticiones de red externas y sin transferencia de datos a terceros.
+
+---
+
+## Integración en CI
+
+Añade **envtarayici** a tu flujo de trabajo de GitHub Actions:
 
 ```yaml
 # .github/workflows/envtarayici.yml
@@ -141,22 +269,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npx envtarayici --ci
+      - name: Run envtarayici
+        run: npx envtarayici --ci
 ```
-
-### Códigos de Salida
-
-- `0`: **CORRECTO (PASSED)** — Todas las variables requeridas por el contrato están presentes y no se detectaron problemas críticos de seguridad. (Las advertencias e información no fallan la compilación).
-- `1`: **FALLIDO (FAILED)** — Se encontraron una o más violaciones de seguridad `CRITICAL` o variables del contrato ausentes de tipo `ERROR`.
-- `2`: **FATAL** — Error de ejecución en runtime (p. ej., argumentos inválidos o problemas de permisos de archivos).
 
 ---
 
 ## Limitaciones Conocidas
 
-1. **Acceso a Entorno con Alias:** Las referencias indirectas como `const env = process.env; env.FOO` no se rastrean para mantener el escaneo AST rápido y libre de dependencias complejas de análisis de alcance (scope analysis).
-2. **Claves Duplicadas en un Solo Archivo:** Si un mismo archivo `.env` define la misma clave varias veces, se conserva el número de línea de la última entrada sin emitir un diagnóstico de duplicado.
-3. **Rendimiento:** La duración del análisis está determinada por el tamaño del proyecto, el número de archivos y el rendimiento de E/S del disco.
+1. **Objetos de Entorno con Alias:** Las referencias indirectas como `const env = process.env; env.FOO` no se resuelven para evitar un análisis de alcance excesivamente pesado.
+2. **Claves Duplicadas:** Si un mismo archivo `.env` define la misma clave varias veces, se conserva el número de línea de la última entrada; no se emite un diagnóstico de duplicado independiente.
+3. **Detección Heurística de Secretos:** Las comprobaciones de prefijos de cliente son heurísticas basadas en coincidencia de palabras clave y listas de permitidos estándar.
+4. **Comprobación Local Basada en Presencia:** La herramienta comprueba que una clave exista en `.env` o `.env.local`, pero no intenta replicar la precedencia completa de ejecución de frameworks específicos.
+
+---
+
+## Requisitos
+
+- **Node.js:** `>= 18.0.0`
+
+---
+
+## Desarrollo
+
+```bash
+npm run build      # Compilar con tsup
+npm test           # Ejecutar la suite de tests con vitest
+npm run typecheck  # Comprobar tipos con tsc
+```
 
 ---
 

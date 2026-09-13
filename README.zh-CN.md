@@ -1,60 +1,119 @@
-# envtarayici 🔍
+# envtarayici
 
 [English](README.md) | [Türkçe](README.tr.md) | [Español](README.es.md) | [简体中文](README.zh-CN.md)
 
-> 面向 Node.js 和 TypeScript 项目的静态环境变量与契约（Contract）检查工具。
-
-**envtarayici** 能够在无需修改任何代码且无任何外部服务依赖的情况下，对您的环境契约（`.env.example`）、本地开发文件（`.env`、`.env.local`）以及源代码进行审计。
-
----
-
-## 契约（Contract）理念
-
-在现代全栈开发中，环境配置通常分布在三个不同的层级：
-
-1. **契约（`.env.example`、`.env.sample`、`.env.template`）：** 声明应用程序运行所需变量的基础规范。
-2. **本地环境（`.env`、`.env.local`）：** 包含开发者本地配置值的本地环境文件。
-3. **源代码（`src/**/*.{ts,js,tsx,jsx}`）：** 在构建时或运行时实际消费这些变量的地方（`process.env.VAR`、`import.meta.env.VAR`）。
-
-**envtarayici** 验证这三个层级是否保持同步：
-- 检测在契约中已定义但开发者本地环境中缺失的变量。
-- 检测在源代码中已使用但从未在契约中记录的变量。
-- 捕获因使用公开前缀而意外暴露给客户端打包文件（client-side bundles）的敏感密钥。
-- 标记被错误提交到 Git 索引中的本地环境文件。
-
----
-
-## envtarayici 的功能与非功能范围
-
-### 包含的功能
-- **契约验证：** 确保模板中声明的必要变量在本地存在。
-- **AST 源码扫描：** 使用 Babel AST 识别静态的 `process.env` 与 `import.meta.env` 引用。
-- **客户端暴露启发式检测：** 标记 `NEXT_PUBLIC_*`、`VITE_*` 等客户端前缀中明确的敏感词模式。
-- **Git 索引跟踪检查：** 检查本地 `.env` 文件是否被 Git 仓库索引跟踪。
-- **终端与 JSON 报告：** 提供人类可读的格式化终端摘要以及供自动化工具使用的机器可读 JSON 输出。
-- **适用于 CI 的退出码：** 为 CI/CD 流程和 pre-commit 钩子提供标准化的退出状态码（`0`、`1`、`2`）。
-
-### 不包含（超出范围）
-- **无 AI / LLM 依赖：** 完全在本地机器上运行的确定性静态分析。
-- **无生产环境 / 云端解析：** 不解析生产环境，也不连接任何密钥管理服务（AWS Secrets Manager、Vault、Doppler 等）。
-- **无自动修复（`--fix`）：** 绝不修改、覆盖或重写您的源代码或 `.env` 文件。
-- **无 Git 历史记录敏感信息扫描：** 仅检查当前工作区和 Git 索引；不遍历历史 git commit（如需排查历史提交，请使用 Gitleaks 等专用工具）。
-- **无运行时解析：** 不执行您的应用程序代码，也不评估运行时环境变量。
-
----
-
-## 快速上手
-
-可在任何 Node.js / TypeScript 项目中直接运行，无需安装：
+面向 Node.js / TypeScript 的静态环境变量与契约（Contract）检查工具。
 
 ```bash
 npx envtarayici
 ```
 
-### 选项
+在环境变量漂移（drift）演变成运行时故障之前，静态检测 `.env.example`、本地环境与源代码之间的不一致。
+
+---
+
+## 它能捕获哪些问题？
+
+在全栈应用开发中，环境变量极易在三个位置之间发生漂移：示例契约文件（`.env.example`）、开发者本地环境文件（`.env`、`.env.local`）以及实际业务代码（`src/`）。
+
+以下是 **envtarayici** 捕获的三个最常见场景：
+
+### 1. 代码 → 契约（缺少文档）
+
+开发者在源码中新增了一个环境变量：
+
+```typescript
+// src/db.ts
+const dbUrl = process.env.DATABASE_URL;
+```
+
+...但忘记将其记录在 `.env.example` 中。其他开发者可能不知道代码依赖了此环境变量。
+
+**envtarayici 将其标记为警告：**
+```text
+WARNINGS:
+  ⚠️  DATABASE_URL (src/db.ts:2)
+     Variable 'DATABASE_URL' is used in source code but missing from .env.example.
+```
+
+### 2. 契约 → 本地（缺少本地变量）
+
+团队成员在 `.env.example` 中增加了一个必需的环境变量：
+
+```text
+DATABASE_URL=postgresql://localhost:5432/mydb
+```
+
+...但你的本地 `.env` 或 `.env.local` 尚未同步更新。
+
+**envtarayici 将其标记为错误：**
+```text
+ERRORS:
+  ❌ DATABASE_URL (.env.example:1)
+     Variable 'DATABASE_URL' is documented in .env.example but missing in local environment (.env).
+```
+
+### 3. Public Secret Exposure
+
+一个敏感密钥被错误地赋予了客户端打包前缀（`NEXT_PUBLIC_`、`VITE_`、`PUBLIC_` 等）：
+
+```text
+# .env.local
+NEXT_PUBLIC_DATABASE_PASSWORD=supersecret
+```
+
+前端框架可能会将带有公开客户端前缀的变量暴露给客户端打包文件（client-side bundles）。
+
+**envtarayici 将其标记为严重安全问题：**
+```text
+CRITICAL:
+  🔴 NEXT_PUBLIC_DATABASE_PASSWORD (.env.local:1)
+     Variable 'NEXT_PUBLIC_DATABASE_PASSWORD' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'PASSWORD'. Secrets must never be exposed to client bundles.
+```
+
+---
+
+## 检查内容
+
+- **契约验证（`MISSING_FROM_LOCAL` / ERROR）：** 在 `.env.example`（或 `.env.sample`、`.env.template`）中已声明但在本地 `.env` 和 `.env.local` 中缺失的变量。
+- **源码覆盖率（`UNDOCUMENTED_IN_EXAMPLE` / WARNING）：** 在源代码中静态引用但未在 `.env.example` 中记录的环境变量。
+- **客户端密钥暴露（`PUBLIC_SECRET_EXPOSURE` / CRITICAL）：** 客户端前缀（`NEXT_PUBLIC_`、`VITE_`、`PUBLIC_`、`GATSBY_`、`NUXT_PUBLIC_`、`EXPO_PUBLIC_`）与明确的敏感词（`SECRET`、`PASSWORD`、`PRIVATE`、`DATABASE_URL`、`SERVICE_ROLE_KEY`、`CREDENTIALS` 等）组合使用。
+- **潜在暴露风险（`POTENTIAL_EXPOSURE` / WARNING）：** 包含模糊标识词（`KEY`、`TOKEN`、`AUTH`）且未命中合法白名单（`ANON_KEY`、`PUBLISHABLE_KEY`、`CLIENT_ID` 等）的公开前缀变量。
+- **Git 跟踪排查（`GIT_TRACKED` / CRITICAL）：** 本地 `.env` 或 `.env.local` 文件被 Git 仓库索引跟踪。
+- **动态引用提示（`DYNAMIC_ACCESS` / INFO）：** 类似 `process.env[dynamicKey]` 这种无法进行静态验证的计算属性访问。
+
+---
+
+## 功能与非功能范围
+
+### 包含的功能
+- **静态契约检查：** 无需运行应用程序即可对比 `.env.example`、`.env` 与源码引用。
+- **AST 代码解析：** 使用 Babel AST 解析器识别真实的代码引用，自动忽略纯字符串、Markdown 和注释行。
+- **客户端暴露启发式规则：** 标记带有常见客户端前缀的凭据泄漏风险。
+- **零配置：** 无需安装，直接运行 `npx envtarayici`。
+- **CI 友好：** 标准退出码（`0`、`1`、`2`）以及机器可读的 JSON 输出。
+
+### 不包含的功能
+- **无 AI / LLM 依赖：** 100% 在本地运行的确定性静态分析。
+- **无云端或密钥管理服务集成：** 不连接 AWS Secrets Manager、HashiCorp Vault、Doppler 等外部服务。
+- **无运行时 / 生产环境解析：** 不解析生产环境、云服务商或运行时配置优先级。
+- **无自动修改代码功能（`--fix`）：** 绝不修改或覆盖您的源代码文件或 `.env` 文件。
+- **无 Git 历史记录扫描：** 仅检查当前工作目录文件与 Git 索引；不遍历历史 commit（排查历史提交请使用 Gitleaks 等专用工具）。
+
+---
+
+## 快速上手
+
+在任何 Node.js / TypeScript 项目根目录执行：
 
 ```bash
-# 适用于 CI/CD 流程的纯文本输出
+npx envtarayici
+```
+
+### CLI 选项
+
+```bash
+# 适用于 CI/CD 流程日志的纯文本输出
 npx envtarayici --ci
 
 # 机器可读的 JSON 输出
@@ -63,7 +122,7 @@ npx envtarayici --json
 # 分析指定目录
 npx envtarayici --cwd ./apps/web
 
-# 查看帮助或版本信息
+# 查看帮助与版本信息
 npx envtarayici --help
 npx envtarayici --version
 ```
@@ -76,19 +135,19 @@ npx envtarayici --version
 ENVTARAYICI
 ──────────────────────────────────────────────────
 CRITICAL:
-  🔴 NEXT_PUBLIC_STRIPE_SECRET_KEY (.env.local:12)
-     Variable 'NEXT_PUBLIC_STRIPE_SECRET_KEY' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'SECRET'. Secrets must never be exposed to client bundles.
+  🔴 NEXT_PUBLIC_DATABASE_PASSWORD (.env.local:1)
+     Variable 'NEXT_PUBLIC_DATABASE_PASSWORD' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'PASSWORD'. Secrets must never be exposed to client bundles.
 
 ERRORS:
-  ❌ DATABASE_URL (.env.example:3)
+  ❌ DATABASE_URL (.env.example:2)
      Variable 'DATABASE_URL' is documented in .env.example but missing in local environment (.env).
 
 WARNINGS:
-  ⚠️  NEW_FEATURE_FLAG (src/api/auth.ts:15)
-     Variable 'NEW_FEATURE_FLAG' is used in source code but missing from .env.example.
+  ⚠️  PORT (src/index.ts:15)
+     Variable 'PORT' is used in source code but missing from .env.example.
 
 INFO:
-  ℹ️  Dynamic environment variable access detected. Static analysis cannot verify dynamic property names. (src/utils/env.ts:8)
+  ℹ️  Dynamic environment variable access detected. Static analysis cannot verify dynamic property names. (src/config.ts:8)
 ──────────────────────────────────────────────────
 Variables documented: 14 | Local variables: 13 | Code variables: 14
 Files scanned: 28
@@ -98,34 +157,103 @@ Status: FAILED (1 Critical, 1 Error, 1 Warning)
 
 ---
 
-## 规则与检测逻辑
+## JSON 输出
 
-| 规则代码 | 严重级别 | 描述 |
-| :--- | :--- | :--- |
-| `PUBLIC_SECRET_EXPOSURE` | **CRITICAL** | 客户端前缀（`NEXT_PUBLIC_`、`VITE_`、`PUBLIC_`、`GATSBY_`、`NUXT_PUBLIC_`、`EXPO_PUBLIC_`）与明确的敏感词（`SECRET`、`PASSWORD`、`PRIVATE`、`DATABASE_URL`、`SERVICE_ROLE_KEY`、`CREDENTIALS` 等）组合使用。 |
-| `GIT_TRACKED` | **CRITICAL** | 本地 `.env` 或 `.env.local` 文件已被 Git 仓库索引跟踪。 |
-| `MISSING_FROM_LOCAL` | **ERROR** | 契约（`.env.example`、`.env.sample` 或 `.env.template`）中定义的必要变量在本地 `.env` 和 `.env.local` 中缺失。 |
-| `UNDOCUMENTED_IN_EXAMPLE` | **WARNING** | 源代码中静态引用的变量未在 `.env.example` 中记录。 |
-| `POTENTIAL_EXPOSURE` | **WARNING** | 公开变量包含模糊关键词（`KEY`、`TOKEN`、`AUTH`），且未匹配显式白名单模式。 |
-| `DYNAMIC_ACCESS` | **INFO** | 如 `process.env[dynamicKey]` 等无法进行静态验证的计算属性访问。 |
+使用 `--json` 生成可用于自动化流程或自定义 CI 脚本的结构化数据：
 
-### 公开 Token 白名单（Allowlist）
+```bash
+npx envtarayici --json
+```
 
-合法的客户端 Token（例如 `NEXT_PUBLIC_SUPABASE_ANON_KEY`、`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`、`NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN`、`*_CLIENT_ID`）已被列入白名单，不会触发误报警告。
+```json
+{
+  "status": "FAILED",
+  "findings": [
+    {
+      "code": "PUBLIC_SECRET_EXPOSURE",
+      "severity": "CRITICAL",
+      "variableName": "NEXT_PUBLIC_DATABASE_PASSWORD",
+      "message": "Variable 'NEXT_PUBLIC_DATABASE_PASSWORD' uses public client prefix 'NEXT_PUBLIC_' but contains sensitive keyword 'PASSWORD'. Secrets must never be exposed to client bundles.",
+      "location": {
+        "file": ".env.local",
+        "line": 1
+      }
+    },
+    {
+      "code": "MISSING_FROM_LOCAL",
+      "severity": "ERROR",
+      "variableName": "DATABASE_URL",
+      "message": "Variable 'DATABASE_URL' is documented in .env.example but missing in local environment (.env).",
+      "location": {
+        "file": ".env.example",
+        "line": 2
+      }
+    }
+  ],
+  "summary": {
+    "contractVariablesCount": 14,
+    "localVariablesCount": 13,
+    "codeVariablesCount": 14,
+    "filesScannedCount": 28,
+    "criticalCount": 1,
+    "errorCount": 1,
+    "warningCount": 0,
+    "infoCount": 0
+  }
+}
+```
 
 ---
 
-## 安全模型：仅元数据分析
+## 退出状态码（Exit Codes）
 
-环境变量的实际取值绝不会被保留、存储、记录，也不会包含在任何检测结果或报告中：
-1. **即时丢弃取值：** 在逐行提取过程中，变量的值在确定是否存在（`hasValue`）后立即被丢弃。
-2. **绝不输出明文：** 明文敏感数据绝不会进入数据结构（`KeyEntry`、`Finding`、`AnalysisResult`），也绝不会打印到终端报告、错误消息、日志或 JSON 输出中。
+| 状态码 | 状态 | 含义 |
+| :---: | :--- | :--- |
+| `0` | **PASSED** | 契约中要求的所有变量在本地均已就绪，且未检测到严重安全风险。（警告和信息提示不会导致检查失败）。 |
+| `1` | **FAILED** | 检测到一个或多个 `CRITICAL` 严重安全违规，或存在 `ERROR` 级别的必要契约变量缺失。 |
+| `2` | **FATAL** | 执行故障（例如参数无效或文件不可读取）。 |
 
 ---
 
-## CI / CD 集成与退出码
+## 支持的源代码语法
 
-将 **envtarayici** 添加到您的 GitHub Actions 或 pre-commit 工作流中：
+AST 扫描器支持解析 JavaScript、TypeScript 和 JSX/TSX 文件中的静态引用模式：
+
+```javascript
+// 直接属性访问与可选链（optional chaining）
+process.env.PORT
+process.env?.PORT
+process.env['PORT']
+process.env["PORT"]
+process.env[`PORT`] // 无表达式的静态模板字面量
+
+// Vite / ESM 语法
+import.meta.env.VITE_API_URL
+import.meta.env?.VITE_API_URL
+import.meta.env['VITE_API_URL']
+
+// 对象解构赋值
+const { PORT, DATABASE_URL } = process.env
+const { API_KEY: myKey } = process.env
+
+// 动态访问（标记为 DYNAMIC_ACCESS / INFO）
+process.env[dynamicKey]
+process.env[`DB_${suffix}`]
+```
+
+---
+
+## 安全性与数据处理
+
+- **不保留任何取值：** 环境变量的实际取值绝不会保存在内存数据结构（`KeyEntry`、`Finding`、`AnalysisResult`）中，绝不会记录在日志中，也绝不会包含在终端或 JSON 报告中。
+- **瞬态读取：** 原始 `.env` 文件内容仅由本地 Node.js 进程临时读取，用于提取键名并确定是否存在取值（`hasValue`）。在逐行提取完成后，所有取值立即被丢弃。
+- **纯本地执行：** 无任何遥测数据收集，不发起外部网络请求，绝不向任何第三方传输数据。
+
+---
+
+## CI 集成
+
+将 **envtarayici** 添加到 GitHub Actions 工作流中：
 
 ```yaml
 # .github/workflows/envtarayici.yml
@@ -141,22 +269,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npx envtarayici --ci
+      - name: Run envtarayici
+        run: npx envtarayici --ci
 ```
-
-### 退出码
-
-- `0`: **通过（PASSED）** — 契约中要求的所有变量均已就绪，且未检测到严重安全问题。（警告与信息提示不会导致构建失败）。
-- `1`: **失败（FAILED）** — 检测到一个或多个 `CRITICAL` 严重安全违规，或存在 `ERROR` 级别的契约变量缺失。
-- `2`: **严重错误（FATAL）** — 运行时执行错误（例如参数无效或文件权限问题）。
 
 ---
 
 ## 已知局限性
 
-1. **别名环境变量访问：** 为确保 AST 扫描的高效性并避免引入繁杂的作用域分析（scope analysis）依赖，类似 `const env = process.env; env.FOO` 的间接引用不会被追踪。
-2. **单文件重复键：** 如果单个 `.env` 文件多次定义了同一个键，将保留最后一个条目的行号，而不会发出重复项诊断。
-3. **性能：** 分析耗时取决于项目规模、文件数量以及磁盘 I/O 性能。
+1. **别名环境变量对象：** 为避免繁杂的作用域分析，间接引用如 `const env = process.env; env.FOO` 不会被追踪。
+2. **重复键名：** 若单个 `.env` 文件多次定义了同一个键，仅保留最后一个条目的行号；不会作为单独的诊断项报错。
+3. **启发式密钥检测：** 客户端前缀检测是基于关键词匹配与通用白名单的命名启发规则。
+4. **基于存在性的本地检查：** 工具仅验证变量是否存在于 `.env` 或 `.env.local` 中，不会尝试复现特定前端/后端框架的完整运行时优先级规则。
+
+---
+
+## 环境要求
+
+- **Node.js:** `>= 18.0.0`
+
+---
+
+## 本地开发
+
+```bash
+npm run build      # 使用 tsup 编译打包
+npm test           # 使用 vitest 运行测试套件
+npm run typecheck  # 使用 tsc 检查类型
+```
 
 ---
 
