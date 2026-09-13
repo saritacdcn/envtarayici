@@ -1,5 +1,7 @@
 # envtarayici 🔍
 
+[English](README.md) | [Türkçe](README.tr.md) | [Español](README.es.md) | [简体中文](README.zh-CN.md)
+
 > Static environment variable and contract linter for Node.js and TypeScript projects.
 
 **envtarayici** audits your environment contracts (`.env.example`), local development files (`.env`, `.env.local`), and source code with zero code changes or external service dependencies.
